@@ -105,6 +105,13 @@ Part of the **SuperInstance** ternary computing ecosystem:
 - [`ternary-constraint`](https://crates.io/crates/ternary-constraint) — constraint satisfaction for ternary variables
 - [`ternary-control`](https://crates.io/crates/ternary-control) — ternary control theory
 
+## Known Limitations
+
+- **Logic system differences affect implication only**: Kleene and Łukasiewicz logic systems differ only in the `Imp` (implication) gate evaluation. For all other gates (And, Or, Not, Xor, Nand, Nor), the two systems produce identical results. This limits the practical value of choosing one system over the other.
+- **No ternary arithmetic circuits**: The library provides logic gates but no arithmetic operations (addition, multiplication) on balanced ternary representations, which are needed for practical ternary computing.
+- **No timing or delay modeling**: Circuits are purely combinatorial with no propagation delay, gate latency, or hazard analysis — essential for real hardware design.
+- **XOR is non-standard**: The XOR implementation treats Unknown as absorbing (Unknown ⊕ anything = Unknown), which differs from some ternary logic conventions where XOR with balanced ternary arithmetic is defined differently.
+
 ## License
 
 MIT
