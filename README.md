@@ -112,6 +112,14 @@ Part of the **SuperInstance** ternary computing ecosystem:
 - **No timing or delay modeling**: Circuits are purely combinatorial with no propagation delay, gate latency, or hazard analysis — essential for real hardware design.
 - **XOR is non-standard**: The XOR implementation treats Unknown as absorbing (Unknown ⊕ anything = Unknown), which differs from some ternary logic conventions where XOR with balanced ternary arithmetic is defined differently.
 
+## See Also
+
+- **ternary-logic** — Advanced ternary logic systems (K3, L3, B3, G3)
+- **ternary-hardware** — Hardware abstraction for balanced ternary computing
+- **ternary-ring** — Ring arithmetic for ternary algebra
+- **ternary-compiler** — Compiler toolchain for ternary instructions
+- **ternary-quantum** — Quantum computing with qutrits
+
 ## License
 
 MIT
