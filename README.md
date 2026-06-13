@@ -1,85 +1,116 @@
-# ternary-circuit
+# Ternary Circuit
 
-**Circuit and logic design with ternary values**
+**Ternary Circuit** implements circuit and logic design with three-valued signals {-1 (False), 0 (Unknown), +1 (True)} — providing ternary gates, logic systems (Kleene and Łukasiewicz), and combinational circuit simulation.
 
-[![ternary](https://img.shields.io/badge/ecosystem-ternary-blue)](https://github.com/orgs/SuperInstance/repositories?q=ternary)
-[![tests](https://img.shields.io/badge/tests-21-green)]()
+## Why It Matters
 
-## Overview
+Binary logic can't represent uncertainty. But real circuits encounter unknown states: uninitialized signals, metastability, don't-care conditions. Three-valued logic (3VL) handles these natively — 0 means "we don't know yet" rather than forcing a binary choice. Ternary logic also enables higher information density per wire (log₂3 ≈ 1.585 bits/trit) and is the theoretical foundation for ternary processors. This crate implements both Kleene's strong three-valued logic (used in formal verification) and Łukasiewicz's logic (used in fuzzy reasoning).
 
-Circuit and logic design with ternary values.
+## How It Works
 
-## Architecture
+### Trit Values
 
-- **`GateInstance`** — core data structure
-- **`TernaryCircuit`** — core data structure
-- **`Trit`** — state enumeration
-- **`TernaryGate`** — state enumeration
-- **`LogicSystem`** — state enumeration
-- **`GateInput`** — state enumeration
-
-### Key Functions
-
-- `value()`
-- `from_i32()`
-- `is_true()`
-- `is_false()`
-- `is_unknown()`
-- `eval_gate()`
-- `truth_table()`
-- `new()`
-- `add_gate()`
-- `evaluate()`
-- ... and 1 more
-
-## Why Ternary?
-
-The balanced ternary system {-1, 0, +1} (also known as Z₃) is the mathematically optimal discrete encoding:
-- **More expressive than binary**: three states capture positive, neutral, and negative
-- **Natural for decisions**: accept/reject/abstain, buy/hold/sell, agree/disagree/neutral
-- **Self-balancing**: the 0 state acts as a universal screen, preventing pathological lock-in
-- **Z₃ cyclic dynamics**: rock-paper-scissors is the only natural coordination mechanism
-
-## Stats
-
-| Metric | Value |
-|--------|-------|
-| Lines of Rust | 396 |
-| Test count | 21 |
-| Public types | 6 |
-| Public functions | 11 |
-
-## Ecosystem
-
-This crate is part of the **[SuperInstance Ternary Fleet](https://github.com/orgs/SuperInstance/repositories?q=ternary)**:
-
-- **[ternary-core](https://github.com/SuperInstance/ternary-core)** — shared traits and Z₃ arithmetic
-- **[ternary-grid](https://github.com/SuperInstance/ternary-grid)** — spatial grid with {-1, 0, +1} cells
-- **[ternary-graph](https://github.com/SuperInstance/ternary-graph)** — ternary-weighted graph algorithms
-- **[ternary-automata](https://github.com/SuperInstance/ternary-automata)** — three-state cellular automata
-- **[ternary-compiler](https://github.com/SuperInstance/ternary-compiler)** — expression compiler and optimizer
-
-200+ crates. 4,300+ tests. One pattern.
-
-## Research Context
-
-The ternary approach connects to several active research areas:
-- **Ternary Neural Networks** (TNNs): weights constrained to {-1, 0, +1} for efficient inference
-- **Huawei's ternary chip**: 7nm ternary silicon with 60% less power consumption
-- **Active inference**: free energy minimization naturally maps to ternary action selection
-- **Cyclic dominance**: RPS dynamics maintain biodiversity in spatial ecology
-- **Z₃ group theory**: the only algebraic group on three elements is cyclic addition mod 3
-
-## Usage
-
-```toml
-[dependencies]
-ternary-circuit = "0.1.0"
 ```
+False (-1):    definitely false
+Unknown (0):   truth value undetermined
+True (+1):     definitely true
+```
+
+### Logic Systems
+
+**Kleene's K₃ (strong Kleene):**
+```
+AND(a, b) = min(a, b)
+OR(a, b)  = max(a, b)
+NOT(a)    = -a
+XOR(a, b) = |a - b|
+
+Truth table (AND):
+         False  Unknown  True
+False    False   False   False
+Unknown  False   Unknown Unknown
+True     False  Unknown  True
+```
+
+**Łukasiewicz's L₃:**
+```
+Implication: a → b = min(1, 1 - a + b)
+```
+
+Gate evaluation: **O(1)** per gate. Circuit of G gates: **O(G)** for combinational evaluation.
+
+### Gate Types
+
+```
+And, Or, Not, Xor, Nand, Nor, Imp (implication)
+```
+
+Each gate: truth table lookup or arithmetic formula. **O(1)** per evaluation.
+
+### Circuit Simulation
+
+A circuit is a DAG of gates:
+
+```
+Circuit {
+    gates: Vec<TernaryGate>,
+    inputs: Vec<usize>,   // gate indices for primary inputs
+    outputs: Vec<usize>,  // gate indices for primary outputs
+    wires: Vec<(usize, usize)>,  // (source_gate, dest_gate)
+}
+```
+
+Topological evaluation: compute gates in dependency order. **O(G + W)** for G gates and W wires.
+
+### Implication
+
+Both Kleene and Łukasiewicz define implication differently:
+
+```
+Kleene:    a → b = max(-a, b)   = OR(NOT(a), b)
+Łukasiewicz: a → b = min(1, -a + b + 1)
+```
+
+The Łukasiewicz version is the basis for fuzzy logic controllers.
+
+## Quick Start
 
 ```rust
-use ternary_circuit;
+use ternary_circuit::{Trit, TernaryGate, LogicSystem};
+
+let a = Trit::True;
+let b = Trit::Unknown;
+
+// Kleene's logic
+let result = TernaryGate::And.evaluate(a, b, LogicSystem::Kleene);
+assert_eq!(result, Trit::Unknown);  // True AND Unknown = Unknown
+
+let not_a = TernaryGate::Not.evaluate(a, Trit::False, LogicSystem::Kleene);
+assert_eq!(not_a, Trit::False);  // NOT True = False
 ```
+
+## API
+
+| Type | Description |
+|------|-------------|
+| `Trit` | False (-1), Unknown (0), True (+1) |
+| `TernaryGate` | And, Or, Not, Xor, Nand, Nor, Imp |
+| `LogicSystem` | Kleene (K₃), Łukasiewicz (L₃) |
+| `Circuit` | DAG of gates with input/output wires |
+
+Key methods: `TernaryGate::evaluate(a, b, system)`, `Circuit::evaluate(inputs)`.
+
+## Architecture Notes
+
+Ternary Circuit provides the logic design layer for ternary computation in SuperInstance. In γ + η = C, True (+1) represents γ (growth — affirming a computation), False (-1) represents η (avoidance — rejecting a computation), and Unknown (0) represents the neutral/uncomputed state. The three-valued logic naturally handles partial information in fleet decision-making. Integrates with `ternary-compiler-optimizer` for circuit optimization and `ternary-codes` for error correction.
+
+See [ARCHITECTURE.md](https://github.com/SuperInstance/SuperInstance/blob/main/ARCHITECTURE.md) for ternary computation architecture.
+
+## References
+
+1. Kleene, S. C. (1952). *Introduction to Metamathematics*. North-Holland. (Three-valued logic)
+2. Łukasiewicz, J. (1920). "O logice trójwartościowej." *Ruch Filozoficzny*, 5, 170–171.
+3. Hayes, B. (2001). "Third Base." *American Scientist*, 89(6), 490–494.
 
 ## License
 
