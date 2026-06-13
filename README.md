@@ -106,6 +106,39 @@ Ternary Circuit provides the logic design layer for ternary computation in Super
 
 See [ARCHITECTURE.md](https://github.com/SuperInstance/SuperInstance/blob/main/ARCHITECTURE.md) for ternary computation architecture.
 
+
+### Truth Tables (Kleene K₃)
+
+**AND** (min):
+```
+         False  Unknown  True
+False    False   False   False
+Unknown  False   Unknown Unknown
+True     False  Unknown  True
+```
+
+**OR** (max):
+```
+         False  Unknown  True
+False    False  Unknown  True
+Unknown  Unknown Unknown  True
+True     True   True     True
+```
+
+**NOT** (negation): False↔True, Unknown→Unknown
+
+### Information Density
+
+Each trit carries log₂(3) ≈ 1.585 bits of information. A 3-wire ternary bus carries the same information as a 5-wire binary bus (3 × 1.585 = 4.755 ≈ 5 bits). This density advantage compounds in large circuits: a 32-trit multiplier is smaller than a 51-bit multiplier for equivalent range.
+
+### Łukasiewicz Implication
+
+```
+a → b = min(1, 1 - a + b)    (L₃ system)
+```
+
+This is the basis for fuzzy logic controllers and many-valued logics used in industrial control systems.
+
 ## References
 
 1. Kleene, S. C. (1952). *Introduction to Metamathematics*. North-Holland. (Three-valued logic)
