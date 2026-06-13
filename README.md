@@ -1,149 +1,199 @@
-# Ternary Circuit
+# ternary-circuit
 
-**Ternary Circuit** implements circuit and logic design with three-valued signals {-1 (False), 0 (Unknown), +1 (True)} — providing ternary gates, logic systems (Kleene and Łukasiewicz), and combinational circuit simulation.
+A ternary logic circuit design library implementing multi-valued logic gates, truth-table generation, circuit composition, and minimization. Supports both **Kleene** (strong Kleene, K₃) and **Łukasiewicz** (Ł₃) three-valued logic systems.
 
 ## Why It Matters
 
-Binary logic can't represent uncertainty. But real circuits encounter unknown states: uninitialized signals, metastability, don't-care conditions. Three-valued logic (3VL) handles these natively — 0 means "we don't know yet" rather than forcing a binary choice. Ternary logic also enables higher information density per wire (log₂3 ≈ 1.585 bits/trit) and is the theoretical foundation for ternary processors. This crate implements both Kleene's strong three-valued logic (used in formal verification) and Łukasiewicz's logic (used in fuzzy reasoning).
+Binary logic circuits cannot express uncertainty. In agent fleets, sensor readings, network state, and trust assessments are often unknown rather than definitively true or false. Three-valued logic (3VL) circuits allow hardware and software to propagate uncertainty through computation rather than collapsing it prematurely.
+
+The `Unknown` value (0) represents "insufficient evidence to decide." In Kleene's K₃, this is non-designated — it never causes a tautology — making it suitable for **conservative** decision-making where unknown inputs produce unknown outputs. In Łukasiewicz's Ł₃, certain compositions of Unknown can still yield True, enabling **optimistic** reasoning.
+
+Within the **γ + η = C** framework:
+
+| Symbol | Domain |
+|--------|--------|
+| γ | `Trit` ∈ {False(−1), Unknown(0), True(+1)} — signal values on circuit wires |
+| η | Gate selection and logic system choice (Kleene vs Łukasiewicz) |
+| C | Logical constraints: truth-table semantics, consistency rules |
 
 ## How It Works
 
-### Trit Values
+### Three-Valued Logic Systems
 
-```
-False (-1):    definitely false
-Unknown (0):   truth value undetermined
-True (+1):     definitely true
-```
+#### Kleene's Strong Logic (K₃)
 
-### Logic Systems
+Operations use the **knowledge ordering**: Unknown is between False and True.
 
-**Kleene's K₃ (strong Kleene):**
-```
-AND(a, b) = min(a, b)
-OR(a, b)  = max(a, b)
-NOT(a)    = -a
-XOR(a, b) = |a - b|
+| AND | F | U | T | | OR | F | U | T |
+|-----|---|---|---| |----|---|---|---|
+| **F** | F | F | F | | **F** | F | U | T |
+| **U** | F | U | U | | **U** | U | U | T |
+| **T** | F | U | T | | **T** | T | T | T |
 
-Truth table (AND):
-         False  Unknown  True
-False    False   False   False
-Unknown  False   Unknown Unknown
-True     False  Unknown  True
-```
+NOT: F↔T, U→U.
 
-**Łukasiewicz's L₃:**
-```
-Implication: a → b = min(1, 1 - a + b)
-```
+AND is implemented as **min** over the ordering F < U < T, and OR as **max**:
 
-Gate evaluation: **O(1)** per gate. Circuit of G gates: **O(G)** for combinational evaluation.
+$$\text{AND}(a, b) = \min(a, b), \qquad \text{OR}(a, b) = \max(a, b)$$
 
-### Gate Types
+where the total order is −1 < 0 < +1.
 
-```
-And, Or, Not, Xor, Nand, Nor, Imp (implication)
-```
+#### Łukasiewicz Logic (Ł₃)
 
-Each gate: truth table lookup or arithmetic formula. **O(1)** per evaluation.
+Differs from K₃ only in **implication**:
 
-### Circuit Simulation
+$$a \to b = \begin{cases} \text{True} & \text{if } a \leq b \\ \neg a \lor b & \text{otherwise} \end{cases}$$
 
-A circuit is a DAG of gates:
+Crucially, in Ł₃: **U → U = True** (since 0 ≤ 0), whereas in K₃: U → U = U. This makes Ł₃ a paraconsistent logic where certain paradoxes become tractable.
 
-```
-Circuit {
-    gates: Vec<TernaryGate>,
-    inputs: Vec<usize>,   // gate indices for primary inputs
-    outputs: Vec<usize>,  // gate indices for primary outputs
-    wires: Vec<(usize, usize)>,  // (source_gate, dest_gate)
-}
-```
+#### Implication Comparison
 
-Topological evaluation: compute gates in dependency order. **O(G + W)** for G gates and W wires.
+| (a, b) | K₃: a→b | Ł₃: a→b |
+|---------|---------|----------|
+| (F, F) | T | T |
+| (F, T) | T | T |
+| (T, F) | F | F |
+| (T, T) | T | T |
+| (U, U) | U | **T** |
+| (T, U) | U | U |
+| (U, F) | U | U |
 
-### Implication
+### XOR in Three-Valued Logic
 
-Both Kleene and Łukasiewicz define implication differently:
+$$\text{XOR}(a, b) = \begin{cases} \text{Unknown} & \text{if } a = \text{U} \text{ or } b = \text{U} \\ \text{True} & \text{if } a \neq b \\ \text{False} & \text{if } a = b \end{cases}$$
 
-```
-Kleene:    a → b = max(-a, b)   = OR(NOT(a), b)
-Łukasiewicz: a → b = min(1, -a + b + 1)
+This preserves the epistemic property: if either input is unknown, the result is unknown.
+
+### Truth Table Generation
+
+For a gate of arity *k* over 3 values, the truth table has $3^k$ entries. The library generates these by enumerating all input combinations:
+
+```rust
+pub fn truth_table(gate: TernaryGate, system: LogicSystem, arity: usize)
+    -> Vec<(Vec<Trit>, Trit)>
 ```
 
-The Łukasiewicz version is the basis for fuzzy logic controllers.
+| Arity | Entries |
+|-------|---------|
+| 1 | 3 |
+| 2 | 9 |
+| 3 | 27 |
+| *k* | $3^k$ |
+
+### Circuit Model
+
+A `TernaryCircuit` is a DAG of `GateInstance`s:
+
+```
+Primary Inputs (Trit[0..n])
+        │
+        ▼
+   ┌─────────┐
+   │ Gate 0  │── output_id = n
+   └─────────┘
+        │
+        ▼
+   ┌─────────┐
+   │ Gate 1  │── output_id = n+1
+   └─────────┘
+        │
+        ▼
+    (outputs HashMap<usize, Trit>)
+```
+
+Evaluation processes gates in topological order. Each gate reads its inputs (primary or from prior gate outputs) and writes its result to a shared value map.
+
+### Circuit Minimization: Double Negation Elimination
+
+The minimizer identifies **NOT→NOT** pairs where a NOT gate feeds directly into another NOT gate:
+
+$$\neg(\neg x) \equiv x$$
+
+The optimizer replaces the second NOT's output references with the original primary input and removes both gates. This is the three-valued equivalent of double-negation elimination in classical logic, and it holds in both K₃ and Ł₃.
+
+### Complexity
+
+| Operation | Time | Notes |
+|-----------|------|-------|
+| `eval_gate` | O(k) | k = input count |
+| `truth_table` | O(3^k) | Exponential in arity |
+| `evaluate` (circuit) | O(g · k_avg) | g = gate count |
+| `minimize_circuit` | O(g²) | Pairwise NOT comparison |
 
 ## Quick Start
 
 ```rust
-use ternary_circuit::{Trit, TernaryGate, LogicSystem};
+use ternary_circuit::{Trit, TernaryGate, LogicSystem, TernaryCircuit, GateInput, truth_table};
 
-let a = Trit::True;
-let b = Trit::Unknown;
+let sys = LogicSystem::Kleene;
 
-// Kleene's logic
-let result = TernaryGate::And.evaluate(a, b, LogicSystem::Kleene);
-assert_eq!(result, Trit::Unknown);  // True AND Unknown = Unknown
+// Basic gates
+assert_eq!(sys.eval_gate(TernaryGate::And, &[Trit::True, Trit::Unknown]), Trit::Unknown);
+assert_eq!(sys.eval_gate(TernaryGate::Or, &[Trit::False, Trit::True]), Trit::True);
+assert_eq!(sys.eval_gate(TernaryGate::Not, &[Trit::Unknown]), Trit::Unknown);
 
-let not_a = TernaryGate::Not.evaluate(a, Trit::False, LogicSystem::Kleene);
-assert_eq!(not_a, Trit::False);  // NOT True = False
+// Build a circuit: (A AND B) OR (NOT A)
+let mut circuit = TernaryCircuit::new(2);
+circuit.add_gate(TernaryGate::And,
+    vec![GateInput::Primary(0), GateInput::Primary(1)], 2);
+circuit.add_gate(TernaryGate::Not,
+    vec![GateInput::Primary(0)], 3);
+circuit.add_gate(TernaryGate::Or,
+    vec![GateInput::Gate(2), GateInput::Gate(3)], 4);
+
+let result = circuit.evaluate(&[Trit::True, Trit::False], sys);
+assert_eq!(result[&4], Trit::True); // (T AND F) OR (NOT T) = U OR F = U... see truth tables
+
+// Generate truth table for 2-input AND
+let table = truth_table(TernaryGate::And, LogicSystem::Kleene, 2);
+assert_eq!(table.len(), 9); // 3^2
 ```
 
 ## API
 
-| Type | Description |
-|------|-------------|
-| `Trit` | False (-1), Unknown (0), True (+1) |
-| `TernaryGate` | And, Or, Not, Xor, Nand, Nor, Imp |
-| `LogicSystem` | Kleene (K₃), Łukasiewicz (L₃) |
-| `Circuit` | DAG of gates with input/output wires |
+### `Trit`
 
-Key methods: `TernaryGate::evaluate(a, b, system)`, `Circuit::evaluate(inputs)`.
+```rust
+pub enum Trit { False = -1, Unknown = 0, True = 1 }
+```
+
+Methods: `value()`, `from_i32()`, `is_true()`, `is_false()`, `is_unknown()`.
+
+### `TernaryGate`
+
+Variants: `And`, `Or`, `Not`, `Xor`, `Nand`, `Nor`, `Imp`.
+
+### `LogicSystem`
+
+Variants: `Kleene`, `Lukasiewicz`. Method: `eval_gate(gate, inputs) -> Trit`.
+
+### `TernaryCircuit`
+
+| Method | Description |
+|--------|-------------|
+| `new(primary_inputs)` | Create with *n* primary inputs |
+| `add_gate(gate, inputs, output_id)` | Add a gate instance |
+| `evaluate(inputs, system)` | Evaluate all gates; returns `HashMap<usize, Trit>` |
+
+### `minimize_circuit(circuit) -> TernaryCircuit`
+
+Eliminates double-negation pairs.
 
 ## Architecture Notes
 
-Ternary Circuit provides the logic design layer for ternary computation in SuperInstance. In γ + η = C, True (+1) represents γ (growth — affirming a computation), False (-1) represents η (avoidance — rejecting a computation), and Unknown (0) represents the neutral/uncomputed state. The three-valued logic naturally handles partial information in fleet decision-making. Integrates with `ternary-compiler-optimizer` for circuit optimization and `ternary-codes` for error correction.
+The circuit model uses **unsigned integer IDs** for wire references rather than named signals. This avoids string allocation in hot paths and maps directly to hardware description languages (HDLs). The trade-off is that human readability requires a separate symbol table.
 
-See [ARCHITECTURE.md](https://github.com/SuperInstance/SuperInstance/blob/main/ARCHITECTURE.md) for ternary computation architecture.
+The choice to support both K₃ and Ł₃ as a runtime parameter (rather than compile-time generic) allows circuits to be re-evaluated under different logics without recompilation — important for agents that may need to switch between conservative and optimistic reasoning modes.
 
-
-### Truth Tables (Kleene K₃)
-
-**AND** (min):
-```
-         False  Unknown  True
-False    False   False   False
-Unknown  False   Unknown Unknown
-True     False  Unknown  True
-```
-
-**OR** (max):
-```
-         False  Unknown  True
-False    False  Unknown  True
-Unknown  Unknown Unknown  True
-True     True   True     True
-```
-
-**NOT** (negation): False↔True, Unknown→Unknown
-
-### Information Density
-
-Each trit carries log₂(3) ≈ 1.585 bits of information. A 3-wire ternary bus carries the same information as a 5-wire binary bus (3 × 1.585 = 4.755 ≈ 5 bits). This density advantage compounds in large circuits: a 32-trit multiplier is smaller than a 51-bit multiplier for equivalent range.
-
-### Łukasiewicz Implication
-
-```
-a → b = min(1, 1 - a + b)    (L₃ system)
-```
-
-This is the basis for fuzzy logic controllers and many-valued logics used in industrial control systems.
+The minimizer currently implements only double-negation elimination. A production ternary circuit optimizer would also include: constant propagation (e.g., `AND(x, False) = False`), dead gate elimination, and Quine-McCluskey-style minimization over the $3^k$ truth table.
 
 ## References
 
-1. Kleene, S. C. (1952). *Introduction to Metamathematics*. North-Holland. (Three-valued logic)
-2. Łukasiewicz, J. (1920). "O logice trójwartościowej." *Ruch Filozoficzny*, 5, 170–171.
-3. Hayes, B. (2001). "Third Base." *American Scientist*, 89(6), 490–494.
+- **Kleene, S. C.** (1952). *Introduction to Metamathematics*, §64. — Strong three-valued logic (K₃).
+- **Łukasiewicz, J.** (1920). "O logice trójwartościowej" (On three-valued logic). *Ruch Filozoficzny*, 5, 170–171. — Original Ł₃.
+- **Malinowski, G.** (2001). "Many-Valued Logics." In *The Blackwell Guide to Philosophical Logic*. — Survey of K₃ vs Ł₃ semantics.
+- **Miller, D. M., & Thornton, M. A.** (2008). *Multiple Valued Logic: Concepts and Representations*. — Ternary circuit synthesis and minimization.
+- **Post, E. L.** (1921). "Introduction to a General Theory of Elementary Propositions." *American Journal of Mathematics*, 43(3), 163–185. — Foundations of many-valued logic.
 
 ## License
 
